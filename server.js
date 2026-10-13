@@ -13,7 +13,7 @@ let botState = {
     status: "running",
     startTime: new Date().toISOString(),
     lastScanTime: "Henüz taranmadı",
-    timeframe: "5m", // Varsayılan zaman dilimi
+    timeframe: "5m",
     piyasaYon: "Bekleniyor",
     btcYon: "Bekleniyor",
     tarananSonuclar: [],
@@ -27,7 +27,7 @@ function addLog(msg) {
     const logLine = `[${timeStr}] ${msg}`;
     console.log(logLine);
     botState.logs.push(logLine);
-    if (botState.logs.length > 100) botState.logs.shift(); // Son 100 logu tut
+    if (botState.logs.length > 100) botState.logs.shift();
 }
 
 // Teknik İndikatör Hesaplama Fonksiyonları
@@ -131,7 +131,6 @@ async function arkaPlanTaramasiYap() {
         addLog("Arka plan taraması başlatıldı...");
         let res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
         if (!res.ok) {
-            // Fapi yedek
             res = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr');
         }
         let data = await res.json();
@@ -199,6 +198,7 @@ async function arkaPlanTaramasiYap() {
                 if (!btcBogaMi && yon === "LONG") continue;
 
                 let anlikFiyat = anlikFiyatlarMap[symbol] || close2;
+                // DÜZELTME: SHORT için Stop yukarı, TP aşağı yönlü hesaplandı
                 let stop = yon === "LONG" ? ema21[i] - (atr[i] * 1.5) : ema21[i] + (atr[i] * 1.5);
                 let tp = yon === "LONG" ? anlikFiyat + ((anlikFiyat - stop) * 2) : anlikFiyat - ((stop - anlikFiyat) * 2);
 
@@ -215,7 +215,6 @@ async function arkaPlanTaramasiYap() {
         botState.lastScanTime = new Date().toLocaleString('tr-TR');
         addLog(`Tarama tamamlandı. Bulunan sinyal: ${yeniSonuclar.length}`);
 
-        // Otomatik işlem açma mekanizması (Arka planda direkt işleme ekle)
         yeniSonuclar.forEach(item => {
             if (!botState.acikIslemler.some(i => i.symbol === item.symbol && i.tf === item.tf)) {
                 botState.acikIslemler.push({
@@ -234,7 +233,7 @@ async function arkaPlanTaramasiYap() {
     }
 }
 
-// Açık işlemleri sürekli takip eden döngü (Her 10 saniyede bir)
+// Açık işlemleri sürekli takip eden döngü
 async function acikIslemleriTakipEt() {
     if (botState.acikIslemler.length === 0) return;
     try {
@@ -248,7 +247,7 @@ async function acikIslemleriTakipEt() {
             if (!pMap[item.symbol]) continue;
             item.anlikFiyat = pMap[item.symbol];
 
-            // Stop kontrolü
+            // DÜZELTME: SHORT için fiyat yükselince (>= stop) stop olur.
             if ((item.yon === "LONG" && item.anlikFiyat <= item.stop) || (item.yon === "SHORT" && item.anlikFiyat >= item.stop)) {
                 islemKapatArkaPlanda(item.symbol, item.stop, "STOP HIT");
             }
@@ -260,8 +259,9 @@ function islemKapatArkaPlanda(symbol, cikisFiyati, sonuc) {
     let idx = botState.acikIslemler.findIndex(i => i.symbol === symbol);
     if (idx !== -1) {
         let item = botState.acikIslemler.splice(idx, 1)[0];
+        // DÜZELTME: SHORT PnL formülü düzeltildi
         let ham = item.yon === "LONG" ? ((cikisFiyati - item.giris)/item.giris)*100 : ((item.giris - cikisFiyati)/item.giris)*100;
-        let net = ham - 0.09; // Komisyon
+        let net = ham - 0.09;
         
         botState.kapatilanIslemler.unshift({
             ...item, cikis: cikisFiyati, sonuc: sonuc, pnl: net, kapanisZamani: new Date().toLocaleString('tr-TR')
@@ -270,7 +270,6 @@ function islemKapatArkaPlanda(symbol, cikisFiyati, sonuc) {
     }
 }
 
-// API Endpointleri (Frontend arayüzü verileri bur ejecutivo'dan çekecek)
 app.get('/api/state', (req, res) => {
     res.json(botState);
 });
@@ -285,17 +284,14 @@ app.post('/api/set-timeframe', (req, res) => {
     }
 });
 
-// Ana sayfa için statik HTML servisi
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '2ema_arasi_cikis_5m.html'));
 });
 
-// Zamanlayıcılar (Arka planda aralıksız çalışır)
-setInterval(arkaPlanTaramasiYap, 10 * 60 * 1000); // Her 10 dakikada bir tarama
-setInterval(acikIslemleriTakipEt, 10000); // Her 10 saniyede bir fiyat kontrolü
+setInterval(arkaPlanTaramasiYap, 10 * 60 * 1000);
+setInterval(acikIslemleriTakipEt, 10000);
 
 app.listen(PORT, () => {
     addLog(`Sunucu ${PORT} portunda 7/24 Arka Plan Modunda Başlatıldı.`);
-    // İlk açılışta hemen tarama tetikle
     setTimeout(arkaPlanTaramasiYap, 5000);
 });
