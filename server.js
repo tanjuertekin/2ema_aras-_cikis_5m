@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const fetch = require('node-fetch');
 const path = require('path');
 
@@ -287,7 +287,7 @@ app.post('/api/set-timeframe', (req, res) => {
 
 // Ana sayfa için statik HTML servisi
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '2ema arası cıkıs.html'));
+    res.sendFile(path.join(__dirname, '2ema_arasi_cikis_5m.html'));
 });
 
 // Zamanlayıcılar (Arka planda aralıksız çalışır)
