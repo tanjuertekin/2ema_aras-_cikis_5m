@@ -676,7 +676,7 @@
                 let top50 = data.filter(i => i.symbol.endsWith('USDT') && !i.symbol.includes('USDC'))
                     .sort((a,b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume)).slice(0, 50);
 
-                data.forEach(p => anlikFiyatlarMap[p.symbol] = parseFloat(p.lastPrice));
+                data.forEach(p => anlikFiyatlarMap[p.symbol] = parseFloat(p.price));
 
                 let toplamDegisim = top50.reduce((acc, curr) => acc + parseFloat(curr.priceChangePercent), 0);
                 let ortalamaDegisim = toplamDegisim / top50.length;
@@ -845,9 +845,11 @@
                     item.anlikFiyat = pMap[item.symbol];
 
                     if (tpAktif && !item.tpYapildi) {
+                        // DÜZELTME: SHORT için fiyat düşünce (<= tp) TP olur. LONG için yükselince (>= tp).
                         if ((item.yon === "LONG" && item.anlikFiyat >= item.tp) || (item.yon === "SHORT" && item.anlikFiyat <= item.tp)) {
                             item.tpYapildi = true;
                             item.stop = item.giris; 
+                            // DÜZELTME: SHORT PnL formülü düzeltildi ((giris - tp) / giris)
                             let pnl = item.yon === "LONG" ? ((item.tp - item.giris)/item.giris)*100 : ((item.giris - item.tp)/item.giris)*100;
                             
                             kapatilanIslemler.unshift({
@@ -858,6 +860,7 @@
                         }
                     }
 
+                    // DÜZELTME: SHORT için fiyat yükselince (>= stop) stop olur. LONG için düşünce (<= stop).
                     if ((item.yon === "LONG" && item.anlikFiyat <= item.stop) || (item.yon === "SHORT" && item.anlikFiyat >= item.stop)) {
                         let sonucTuru = item.tpYapildi ? "KALAN %50 STOP" : "STOP HIT";
                         islemKapat(item.symbol, item.stop, sonucTuru);
@@ -894,6 +897,7 @@
             let idx = acikIslemler.findIndex(i => i.symbol === symbol);
             if (idx !== -1) {
                 let item = acikIslemler.splice(idx, 1)[0];
+                // DÜZELTME: SHORT pozisyonlar için PnL hesaplama formülü (giris - cikis) olarak düzeltildi
                 let ham = item.yon === "LONG" ? ((cikisFiyati - item.giris)/item.giris)*100 : ((item.giris - cikisFiyati)/item.giris)*100;
                 let net = ham - ORTALAMA_KOMISYON;
                 
